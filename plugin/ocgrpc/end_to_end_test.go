@@ -29,17 +29,28 @@ import (
 
 var keyAccountId = tag.MustNewKey("account_id")
 
-func TestEndToEnd_Single(t *testing.T) {
+func TestEndToEnd_Single(t *testing.T) { // if it's test or seperate package like e2e_test like Easwar mentioned, only test as needed with only exposed functions
 	view.Register(ocgrpc.DefaultClientViews...)
 	defer view.Unregister(ocgrpc.DefaultClientViews...)
 	view.Register(ocgrpc.DefaultServerViews...)
 	defer view.Unregister(ocgrpc.DefaultServerViews...)
+
+	/*
+	clientViews := append(ocgrpc.DefaultClientViews, ocgrpc.ClientStartedRPCsView)
+		view.Register(clientViews...)
+		defer view.Unregister(clientViews...)
+		serverViews := append(ocgrpc.DefaultServerViews, ocgrpc.ServerStartedRPCsView)
+		view.Register(serverViews...)
+		defer view.Unregister(serverViews...)
+	*/
 
 	extraViews := []*view.View{
 		ocgrpc.ServerReceivedMessagesPerRPCView,
 		ocgrpc.ClientReceivedMessagesPerRPCView,
 		ocgrpc.ServerSentMessagesPerRPCView,
 		ocgrpc.ClientSentMessagesPerRPCView,
+		ocgrpc.ServerStartedRPCsView,
+		ocgrpc.ClientStartedRPCsView,
 	}
 	view.Register(extraViews...)
 	defer view.Unregister(extraViews...)
@@ -51,6 +62,7 @@ func TestEndToEnd_Single(t *testing.T) {
 	ctx, _ = tag.New(ctx, tag.Insert(keyAccountId, "abc123"))
 
 	var (
+		// how do tags plumb around/how are they attached
 		clientMethodTag        = tag.Tag{Key: ocgrpc.KeyClientMethod, Value: "testpb.Foo/Single"}
 		serverMethodTag        = tag.Tag{Key: ocgrpc.KeyServerMethod, Value: "testpb.Foo/Single"}
 		clientStatusOKTag      = tag.Tag{Key: ocgrpc.KeyClientStatus, Value: "OK"}
@@ -63,13 +75,22 @@ func TestEndToEnd_Single(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	checkCount(t, ocgrpc.ClientStartedRPCsView, 1, clientMethodTag) // this tag isn't working
+	checkCount(t, ocgrpc.ServerStartedRPCsView, 1, serverMethodTag)
 	checkCount(t, ocgrpc.ClientCompletedRPCsView, 1, clientMethodTag, clientStatusOKTag)
 	checkCount(t, ocgrpc.ServerCompletedRPCsView, 1, serverMethodTag, serverStatusOKTag)
 
-	_, _ = client.Single(ctx, &testpb.FooRequest{Fail: true})
+
+	_, _ = client.Single(ctx, &testpb.FooRequest{Fail: true}) // Perfect, this should record the beginning? but it's not completed it fails so should still record it?
+	checkCount(t, ocgrpc.ClientStartedRPCsView, 2, clientMethodTag) // starts, just fails? client and server what?
+	checkCount(t, ocgrpc.ServerStartedRPCsView, 2, serverMethodTag) // starts, fails so still counts?
 	checkCount(t, ocgrpc.ClientCompletedRPCsView, 1, clientMethodTag, serverStatusUnknownTag)
 	checkCount(t, ocgrpc.ServerCompletedRPCsView, 1, serverMethodTag, clientStatusUnknownTag)
+	// aggregation type count() ^^^, this is the type of CompletedRPCs, is this the correct type of metric?
 
+
+
+	// type metric distribution vvv
 	tcs := []struct {
 		v    *view.View
 		tags []tag.Tag
@@ -98,9 +119,10 @@ func TestEndToEnd_Single(t *testing.T) {
 	}
 }
 
-func TestEndToEnd_Stream(t *testing.T) {
+func TestEndToEnd_Stream(t *testing.T) { // unary and stream trigger this to be called
 	view.Register(ocgrpc.DefaultClientViews...)
 	defer view.Unregister(ocgrpc.DefaultClientViews...)
+
 	view.Register(ocgrpc.DefaultServerViews...)
 	defer view.Unregister(ocgrpc.DefaultServerViews...)
 
@@ -109,6 +131,8 @@ func TestEndToEnd_Stream(t *testing.T) {
 		ocgrpc.ClientReceivedMessagesPerRPCView,
 		ocgrpc.ServerSentMessagesPerRPCView,
 		ocgrpc.ClientSentMessagesPerRPCView,
+		ocgrpc.ClientStartedRPCsView,
+		ocgrpc.ServerStartedRPCsView,
 	}
 	view.Register(extraViews...)
 	defer view.Unregister(extraViews...)
@@ -139,13 +163,15 @@ func TestEndToEnd_Stream(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := stream.CloseSend(); err != nil {
+	if err := stream.CloseSend(); err != nil { // why isn't this picking up grpc? Do I need to go get something?
 		t.Fatal(err)
 	}
 	if _, err = stream.Recv(); err != io.EOF {
 		t.Fatal(err)
 	}
 
+	checkCount(t, ocgrpc.ClientStartedRPCsView, 1, clientMethodTag)
+	checkCount(t, ocgrpc.ServerStartedRPCsView, 1, serverMethodTag) // lol run this and I think I'm done, step 2 add registration and test for this (by counting it in exporter) in observability package
 	checkCount(t, ocgrpc.ClientCompletedRPCsView, 1, clientMethodTag, clientStatusOKTag)
 	checkCount(t, ocgrpc.ServerCompletedRPCsView, 1, serverMethodTag, serverStatusOKTag)
 
@@ -183,7 +209,13 @@ func getCount(t *testing.T, v *view.View, tags ...tag.Tag) (int64, bool) {
 			return 0, false
 		}
 	}
-	rows, err := view.RetrieveData(v.Name)
+	// I think we can just register our own exporter in observability_test.go and that should be good enough to handle it.
+
+	// So where to plumb in
+
+	// Just need a test (or multiple tests) where a system with RPCs sent back and forth is configured
+
+	rows, err := view.RetrieveData(v.Name) // this tests at the view level of granularity. I guess we could also add this, with the downstream effect of a view collected from the testing system. Also, do they have any tests with fake exporters?
 	if err != nil {
 		t.Fatal(err)
 	}
