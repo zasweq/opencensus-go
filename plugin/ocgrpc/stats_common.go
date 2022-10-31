@@ -102,21 +102,17 @@ func handleRPCBegin(ctx context.Context, s *stats.Begin) {
 	if !ok {
 		if grpclog.V(2) {
 			grpclog.Infoln("Failed to retrieve *rpcData from context.")
-		} // will this have access to rpc Data/method name at this point of RPC?, just try it out lol you'll see it in test, if it fails you'll see what it should be
+		}
 	}
-	/*
-	ocstats.RecordWithOptions(ctx,
-				ocstats.WithTags(
-					tag.Upsert(KeyClientMethod, methodName(d.method)),
-	*/
-
 
 	if s.IsClient() {
-		// problem: how to plumb method information into here? Scale up stats handler definition?, TagRPC also attaches the methodName tag to RPC
-		// methodName() just trims the left side /
-		ocstats.RecordWithOptions(ctx, ocstats.WithTags(tag.Upsert(KeyClientMethod, methodName(d.method))), ocstats.WithMeasurements(ClientStartedRPCs.M(1)))
+		ocstats.RecordWithOptions(ctx,
+			ocstats.WithTags(tag.Upsert(KeyClientMethod, methodName(d.method))),
+			ocstats.WithMeasurements(ClientStartedRPCs.M(1)))
 	} else {
-		ocstats.RecordWithOptions(ctx, ocstats.WithTags(tag.Upsert(KeyClientMethod, methodName(d.method))), ocstats.WithMeasurements(ServerStartedRPCs.M(1)))
+		ocstats.RecordWithOptions(ctx,
+			ocstats.WithTags(tag.Upsert(KeyClientMethod, methodName(d.method))),
+			ocstats.WithMeasurements(ServerStartedRPCs.M(1)))
 	}
 }
 

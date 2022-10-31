@@ -74,8 +74,8 @@ var (
 	ClientStartedRPCsView = &view.View{
 		Measure: ClientStartedRPCs,
 		Name: "grpc.io/client/started_rpcs",
-		Description: "Count of started RPCs by method", // Is the same as C and Java? I'm assuming so Is this language right?
-		TagKeys: []tag.Key{KeyClientMethod}, // no status because just started RPCs, so no need to record this, just the method name (have access to that data at start of RPCs), is this right? How does the client method get plumbed off the call and put in the right place?
+		Description: "Count of started RPCs by method",
+		TagKeys: []tag.Key{KeyClientMethod},
 		Aggregation: view.Count(),
 	}
 

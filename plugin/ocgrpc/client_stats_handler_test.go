@@ -313,7 +313,7 @@ func TestClientDefaultCollections(t *testing.T) {
 		}
 
 		for _, wantData := range tc.wants {
-			gotRows, err := view.RetrieveData(wantData.v().Name) // or do we want to add a test here?
+			gotRows, err := view.RetrieveData(wantData.v().Name)
 			if err != nil {
 				t.Errorf("%q: RetrieveData(%q) = %v", tc.label, wantData.v().Name, err)
 				continue

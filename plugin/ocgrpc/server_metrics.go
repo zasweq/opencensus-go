@@ -76,7 +76,7 @@ var (
 
 	ServerStartedRPCsView = &view.View{
 		Measure: ServerStartedRPCs,
-		Name: "grpc.io/server/started_rpcs", // Is this what was defined in documentation?
+		Name: "grpc.io/server/started_rpcs",
 		Description: "Count of started RPCs by method and status.",
 		TagKeys: []tag.Key{KeyServerMethod},
 		Aggregation: view.Count(),
