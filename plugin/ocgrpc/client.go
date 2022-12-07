@@ -43,7 +43,7 @@ func (c *ClientHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo) con
 }
 
 // HandleRPC implements per-RPC tracing and stats instrumentation.
-func (c *ClientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) {
+func (c *ClientHandler) HandleRPC(ctx context.Context, rs stats.RPCStats) { // rpc stats is the data passed in.
 	traceHandleRPC(ctx, rs)
 	statsHandleRPC(ctx, rs)
 }

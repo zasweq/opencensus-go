@@ -98,12 +98,59 @@ func statsHandleRPC(ctx context.Context, s stats.RPCStats) {
 }
 
 func handleRPCBegin(ctx context.Context, s *stats.Begin) {
-	d, ok := ctx.Value(rpcDataKey).(*rpcData)
+	d, ok := ctx.Value(rpcDataKey).(*rpcData) // wait fuck this is already per RPC
 	if !ok {
 		if grpclog.V(2) {
 			grpclog.Infoln("Failed to retrieve *rpcData from context.")
 		}
 	}
+
+	// NO YOU CAN DO THIS AT THE BLOB
+
+	// b := GetBlob(ctx)
+
+	// iterate that object that's tied to RPC here...
+	if s.IsTransparentRetryAttempt {
+		// or do we want this to be int64 to keep consistent with previous rpc data?
+		// I think that my idea is correct...it can't be negative and Doug won't notice that alligning thing in new PR?
+		atomic.AddUint32(&b.countTransparentRetries, 1)
+	} else {
+		atomic.AddUint32(&b.countNonTransparentRetries, 1)
+	}
+
+	// that's it...the next question is timestamp
+
+	// Is the downtime at beginning of RPC counted?
+
+	// What are the operations passed that map to:
+
+	// call start?
+
+	/*
+	(does the operation that is passed in have
+	timestamp, can also take it here since the operations map 1:1 with these
+	methods) they do have timestamps :D!
+	*/
+	// ( call attempt started
+
+	// ) call attempt finished
+
+	// does the beginning number happen (i.e. is there delay between call
+	// starting and first attempt? Two seperate operations? Is there a way to
+	// tell? Seems like no should start attempt immediately - due to backoff.)
+	// "and the total amount of delay time caused by retry backoff."
+
+	// if you do want the beginning, you could take a timestamp in the top level
+	// interceptor's blob object thingy and the the delta to first attempt, but
+	// would have to somehow know conditionally if it's the first attempt which
+	// idk if this comlexity is worth it - counting retry backoff)
+
+	// scenario:                    number you want:
+	// 1 () 3 () 4 finish here...   8 - count the last interval as finished
+	// 3 () 2 ( finish here         5 (don't count the last interval - could also implictly calculate this logically by counting the intervals between)
+	//
+
+	// what are we doing about timestamp, could also stick in rpcData?
 
 	if s.IsClient() {
 		ocstats.RecordWithOptions(ctx,
@@ -117,6 +164,8 @@ func handleRPCBegin(ctx context.Context, s *stats.Begin) {
 }
 
 func handleRPCOutPayload(ctx context.Context, s *stats.OutPayload) {
+	// rpcData - "for a call", logically coupled to call which wraps callAttempts
+	// do you need to do anything past stick this rpcData in somewhere? or just scale up rpcData
 	d, ok := ctx.Value(rpcDataKey).(*rpcData)
 	if !ok {
 		if grpclog.V(2) {
@@ -126,7 +175,7 @@ func handleRPCOutPayload(ctx context.Context, s *stats.OutPayload) {
 	}
 
 	atomic.AddInt64(&d.sentBytes, int64(s.Length))
-	atomic.AddInt64(&d.sentCount, 1)
+	atomic.AddInt64(&d.sentCount, 1) // sentCount addition 1, number of sends
 }
 
 func handleRPCInPayload(ctx context.Context, s *stats.InPayload) {
@@ -151,6 +200,21 @@ func handleRPCEnd(ctx context.Context, s *stats.End) {
 		return
 	}
 
+	// Can this only get called once per call? (rpc level)
+	// if so, you can load the per call data here and emit the metrics then
+	// I think time spent without an active attempt can also be emitted at the end of the call.
+	// but the discrete intervals calculated are still somewhat complicated
+
+	// load per call information here - that blob object thingy, stick it in the
+	// measurement recordings at the end (so these current ones map per attempt
+	// -> distribution, how do you do it per call, does it happen implicitly or
+	// explicitly?)
+
+
+	// Feng, Doug, Easwar, Eric as my peer reviewers
+
+
+
 	elapsedTime := time.Since(d.startTime)
 
 	var st string
@@ -173,10 +237,18 @@ func handleRPCEnd(ctx context.Context, s *stats.End) {
 			ocstats.WithAttachments(attachments),
 			ocstats.WithMeasurements(
 				ClientSentBytesPerRPC.M(atomic.LoadInt64(&d.sentBytes)),
-				ClientSentMessagesPerRPC.M(atomic.LoadInt64(&d.sentCount)),
+				ClientSentMessagesPerRPC.M(atomic.LoadInt64(&d.sentCount)), // meaured here at RPC end, so this is NOT steady stream, happens once, I'm assuming this already partions per RPC. Wait this is per attempt not per rpc and happens at the end. If you have the object in the top level context, will make it per call not per attempt
 				ClientReceivedMessagesPerRPC.M(atomic.LoadInt64(&d.recvCount)),
 				ClientReceivedBytesPerRPC.M(atomic.LoadInt64(&d.recvBytes)),
-				ClientRoundtripLatency.M(latencyMillis)))
+				ClientRoundtripLatency.M(latencyMillis)),
+				// Above is per attempt ^^^ (for the view distribution and sum)
+
+				// This is correct imo, vvv is per call...only question is how to do this for distribution and sum for the /call vs. /attempt ^^^ measurement)
+
+				// ClientRetriesPerCall.M(b.countNonTransparentRetries)) (should we rename the perRPC to per Attempt since I own this now?)
+				// ClientTransparentRetriesPerCall.M(b.countTransparentRetries))
+				// ClientRetryDelayPerCall.M(b.timeNoActiveAttempt))
+		)
 	} else {
 		ocstats.RecordWithOptions(ctx,
 			ocstats.WithTags(
@@ -236,7 +308,7 @@ func statusCodeToString(s *status.Status) string {
 
 func getSpanCtxAttachment(ctx context.Context) metricdata.Attachments {
 	attachments := map[string]interface{}{}
-	span := trace.FromContext(ctx)
+	span := trace.FromContext(ctx) // weird, interfaces with trace here...if available
 	if span == nil {
 		return attachments
 	}

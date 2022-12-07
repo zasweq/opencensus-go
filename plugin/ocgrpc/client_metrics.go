@@ -23,6 +23,13 @@ import (
 
 // The following variables are measures are recorded by ClientHandler:
 var (
+	// A45 defines this /RPC unit as /retry attempt - "gRPC will treat each
+	// retry attempt or hedged RPC as a distinct RPC with regards to the current
+	// set of metrics"
+
+	// the retry metrics are /(the whole client call)
+	// again, would an interceptor help here?
+
 	ClientSentMessagesPerRPC     = stats.Int64("grpc.io/client/sent_messages_per_rpc", "Number of messages sent in the RPC (always 1 for non-streaming RPCs).", stats.UnitDimensionless)
 	ClientSentBytesPerRPC        = stats.Int64("grpc.io/client/sent_bytes_per_rpc", "Total bytes sent across all request messages per RPC.", stats.UnitBytes)
 	ClientReceivedMessagesPerRPC = stats.Int64("grpc.io/client/received_messages_per_rpc", "Number of response messages received per RPC (always 1 for non-streaming RPCs).", stats.UnitDimensionless)

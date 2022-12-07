@@ -26,7 +26,7 @@ import (
 
 // statsTagRPC gets the tag.Map populated by the application code, serializes
 // its tags into the GRPC metadata in order to be sent to the server.
-func (h *ClientHandler) statsTagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+func (h *ClientHandler) statsTagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context { // theres a stats tag rpc too.
 	startTime := time.Now()
 	if info == nil {
 		if grpclog.V(2) {
@@ -35,7 +35,7 @@ func (h *ClientHandler) statsTagRPC(ctx context.Context, info *stats.RPCTagInfo)
 		return ctx
 	}
 
-	d := &rpcData{
+	d := &rpcData{ // ah so you do have to have your own, this creates it per attempt
 		startTime: startTime,
 		method:    info.FullMethodName,
 	}
